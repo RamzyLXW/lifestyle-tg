@@ -1,0 +1,85 @@
+name: daily-post
+
+# Раз в день постит ОДИН одобренный-неопубликованный фрагмент Шевченко в канал.
+# Состояние антиповтора (published_at) и одобрения живут в закоммиченном shevchenko.db;
+# единственный писатель в репо — этот workflow (коммитит БД обратно после поста).
+
+on:
+  schedule:
+    # 12:00 UTC ежедневно. Киев: лето (UTC+3)=15:00, зима (UTC+2)=14:00.
+    # + случайный джиттер 0–40 мин (ниже) → пост ВСЕГДА попадает в окно 14:00–16:00 по Киеву.
+    # Примечание: cron в GitHub Actions неточен (возможна задержка), окно подобрано с запасом.
+    - cron: '0 12 * * *'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Холостой прогон: выбрать и показать пост, НЕ отправлять и НЕ писать в БД'
+        type: boolean
+        default: false
+
+permissions:
+  contents: write   # коммитим обновлённый shevchenko.db (published_at + одобрения) обратно в репо
+
+concurrency:
+  group: daily-post
+  cancel-in-progress: false
+
+jobs:
+  post:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.15.0'   # как локально: node:sqlite работает без флага
+          cache: 'npm'
+
+      - run: npm ci
+
+      - name: Jitter — попасть «куда-то» в окно 14:00–16:00 по Киеву
+        if: ${{ github.event_name == 'schedule' }}
+        run: sleep $(( RANDOM % 2400 ))   # 0–40 минут
+
+      - name: Подтянуть одобрения из Google Sheet (опционально; сбой не валит джоб)
+        env:
+          SHEVCHENKO_SHEET_ID: ${{ secrets.SHEVCHENKO_SHEET_ID }}
+          GOOGLE_SA_KEY: ${{ secrets.GOOGLE_SA_KEY }}
+        run: |
+          if [ -n "$GOOGLE_SA_KEY" ] && [ -n "$SHEVCHENKO_SHEET_ID" ]; then
+            printf '%s' "$GOOGLE_SA_KEY" > service-account.json
+            export GOOGLE_APPLICATION_CREDENTIALS="$PWD/service-account.json"
+            npm run import:sheet || echo "::warning::import:sheet упал — постим из закоммиченной БД"
+            rm -f service-account.json
+          else
+            echo "Секретов Google Sheet нет — постим из закоммиченной БД (одобрения пушит владелец)."
+          fi
+
+      - name: Пост в Telegram
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          if [ "${{ inputs.dry_run }}" = "true" ]; then
+            npm run post -- --dry-run
+          else
+            npm run post
+          fi
+
+      - name: Чекпойнт WAL (гарантируем, что published_at попал в основной файл БД)
+        if: ${{ inputs.dry_run != 'true' }}
+        run: |
+          node -e "const {DatabaseSync}=require('node:sqlite');const d=new DatabaseSync('shevchenko.db');d.exec('PRAGMA wal_checkpoint(TRUNCATE)');d.close();"
+
+      - name: Закоммитить обновлённую БД обратно в репо
+        if: ${{ inputs.dry_run != 'true' }}
+        run: |
+          if git diff --quiet -- shevchenko.db; then
+            echo "БД не изменилась (ничего не опубликовано) — коммита нет."
+          else
+            git config user.name "lifestyle-tg bot"
+            git config user.email "actions@users.noreply.github.com"
+            git add shevchenko.db
+            git commit -m "chore(post): published_at update [skip ci]"
+            git push
+          fi

@@ -1,0 +1,31 @@
+{
+  "name": "lifestyle-tg",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Telegram-канал «Тарас Шевченко. Лайфстайл» — импорт записей с litopys.org.ua и автопостинг",
+  "scripts": {
+    "import": "tsx src/import-page.ts",
+    "typecheck": "tsc --noEmit",
+    "render": "tsx src/render-post.ts",
+    "export": "tsx src/export-sheets.ts",
+    "excerpts": "tsx src/run-excerpts.ts",
+    "import:sheet": "tsx src/import-sheet.ts",
+    "engine": "tsx src/run-engine.ts",
+    "post": "tsx src/poster.ts",
+    "import:volume": "tsx src/import-volume.ts",
+    "import:diary": "tsx src/import-diary.ts",
+    "curate": "tsx src/curate.ts"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.105.0",
+    "cheerio": "^1.0.0",
+    "googleapis": "^126.0.1",
+    "iconv-lite": "^0.6.3"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0"
+  }
+}
