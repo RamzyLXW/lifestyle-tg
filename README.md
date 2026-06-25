@@ -26,7 +26,7 @@
 | Движок выбора | `src/engine.ts`, `src/run-engine.ts` | ✅ «в этот день» → фолбэк случайная интересная → антиповтор; footer по `footer_kind` (`npm run engine [-- --date DD.MM]`) |
 | Рендер поста | `src/render.ts`, `src/render-post.ts` | ✅ БЕЗ шапки в тексте (имя канала Telegram даёт сам); низ: есть полная дата → дата+возраст, иначе → источник (`source_label`, иначе авто из `work_title`). HTML для Telegram |
 | Постер (Telegram) | `src/poster.ts`, `src/telegram.ts` | ✅ sendMessage(HTML) + `published_at`; режимы `--check` / `--dry-run` / `--date`; токен/канал из `.env` |
-| Планировщик (раз в день) | — | ⏳ (cron / GitHub Actions дёргает `npm run post`) |
+| Планировщик (раз в день) | `.github/workflows/daily-post.yml` | 🟡 GitHub Actions: cron 12:00 UTC + джиттер → пост в окно **14:00–16:00 по Киеву**; `npm run post`; коммитит `shevchenko.db` обратно (антиповтор переживает запуски); (опц.) синк одобрений из Google Sheet перед постом. Остался remote+секреты |
 
 ## Запуск
 
@@ -102,6 +102,8 @@ shev123 «Тризна», shev151) → пойдут через перевод.
 3. **Вычитка владельцем → публикация.** `npm run export` (БД → Sheets, вынесет предложения куратора) → в таблице
    проставить `approved=1` на лучших → `npm run import:sheet` (вернуть в БД) → `npm run engine`/`npm run post`. ← следующий шаг.
 4. **Шаг перевода** — для дневниковых/русских фрагментов (+ 3 рус. стиха): литературный перевод на украинский (нужен ключ).
-5. **Планировщик (Роль 5)** — cron/GitHub Actions дёргает `npm run post` раз в день.
+5. ✅ **СДЕЛАНО (код) — планировщик (Роль 5).** `.github/workflows/daily-post.yml` (GitHub Actions),
+   репо под git локально. Остался remote + секреты (`TELEGRAM_BOT_TOKEN`/`TELEGRAM_CHAT_ID` обязательно;
+   `SHEVCHENKO_SHEET_ID`+`GOOGLE_SA_KEY` опц. — тогда владелец работает только с таблицей). Шаги — в `STATUS.md`.
 
 Дневник (298 рус. записей) пока лежит в базе как сырьё — можно перевести выборочно или не трогать.
