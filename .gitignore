@@ -15,3 +15,5 @@ steady-habitat-*.json
 # ключ service-account для CI пишется workflow на лету и сразу удаляется — никогда не коммитить
 service-account.json
 .env
+# журнал последнего поста (для надёжного переналожения published_at в CI) — не коммитим
+.last-post.json

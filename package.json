@@ -13,6 +13,7 @@
     "import:sheet": "tsx src/import-sheet.ts",
     "engine": "tsx src/run-engine.ts",
     "post": "tsx src/poster.ts",
+    "mark-published": "tsx src/mark-published.ts",
     "import:volume": "tsx src/import-volume.ts",
     "import:diary": "tsx src/import-diary.ts",
     "curate": "tsx src/curate.ts"

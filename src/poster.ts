@@ -3,6 +3,7 @@
 //   npm run post -- --dry-run        выбрать и показать пост, НЕ отправлять
 //   npm run post -- --date 18.02     выбрать на конкретный день
 //   npm run post                     выбрать на сегодня и ОТПРАВИТЬ в канал
+import fs from "node:fs";
 import { Store } from "./db.js";
 import { selectEntry, chooseFooter, labelKey, COOLDOWN_DAYS, type Selectable } from "./engine.js";
 import { renderPostHtml, renderPostPreview, type RenderInput } from "./render.js";
@@ -73,9 +74,14 @@ async function post() {
   }
 
   const chatId = requireEnv("TELEGRAM_CHAT_ID");
+  const iso = new Date().toISOString();
   const sent = await sendMessage(chatId, html);
-  store.markPublished(entry.source_id, new Date().toISOString());
+  store.markPublished(entry.source_id, iso);
   store.close();
+  // Журнал для НАДЁЖНОГО сохранения состояния в CI: после отправки в Telegram воркфлоу берёт
+  // свежую БД из origin и заново ставит этот published_at (см. src/mark-published.ts), чтобы
+  // гонка git push не «потеряла» публикацию и стих не вышел повторно (баг 26→27.06 с shev107).
+  fs.writeFileSync(".last-post.json", JSON.stringify({ source_id: entry.source_id, published_at: iso }));
   console.log(`\n✓ опубликовано в ${chatId} (message_id ${sent.message_id}), published_at записан.`);
 }
 

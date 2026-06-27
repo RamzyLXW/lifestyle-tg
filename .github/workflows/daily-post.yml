@@ -1,8 +1,9 @@
 name: daily-post
 
 # Раз в день постит ОДИН одобренный-неопубликованный фрагмент Шевченко в канал.
-# Состояние антиповтора (published_at) и одобрения живут в закоммиченном shevchenko.db;
-# единственный писатель в репо — этот workflow (коммитит БД обратно после поста).
+# Состояние антиповтора (published_at) живёт в закоммиченном shevchenko.db. После отправки
+# published_at сохраняется в origin НАДЁЖНО (переналожение на свежую БД + ретраи push), чтобы
+# гонка push не «теряла» публикацию и стих не выходил повторно (баг 26→27.06 с shev107).
 
 on:
   schedule:
@@ -41,6 +42,14 @@ jobs:
         if: ${{ github.event_name == 'schedule' }}
         run: sleep $(( RANDOM % 2400 ))   # 0–40 минут
 
+      - name: Свежая БД из origin перед постом (вдруг origin ушёл вперёд за время чекаута/джиттера)
+        env:
+          BR: ${{ github.ref_name }}
+        run: |
+          git fetch -q origin "$BR"
+          git checkout "origin/$BR" -- shevchenko.db
+          echo "БД синхронизирована с origin/$BR (антиповтор видит свежий published_at)."
+
       - name: Подтянуть одобрения из Google Sheet (опционально; сбой не валит джоб)
         env:
           SHEVCHENKO_SHEET_ID: ${{ secrets.SHEVCHENKO_SHEET_ID }}
@@ -66,20 +75,36 @@ jobs:
             npm run post
           fi
 
-      - name: Чекпойнт WAL (гарантируем, что published_at попал в основной файл БД)
+      - name: Надёжно сохранить published_at в origin (ретраи + переналожение на свежую БД)
         if: ${{ inputs.dry_run != 'true' }}
+        env:
+          BR: ${{ github.ref_name }}
         run: |
-          node -e "const {DatabaseSync}=require('node:sqlite');const d=new DatabaseSync('shevchenko.db');d.exec('PRAGMA wal_checkpoint(TRUNCATE)');d.close();"
-
-      - name: Закоммитить обновлённую БД обратно в репо
-        if: ${{ inputs.dry_run != 'true' }}
-        run: |
-          if git diff --quiet -- shevchenko.db; then
-            echo "БД не изменилась (ничего не опубликовано) — коммита нет."
-          else
-            git config user.name "lifestyle-tg bot"
-            git config user.email "actions@users.noreply.github.com"
-            git add shevchenko.db
-            git commit -m "chore(post): published_at update [skip ci]"
-            git push
+          if [ ! -f .last-post.json ]; then
+            echo "Ничего не опубликовано (.last-post.json нет) — сохранять нечего."
+            exit 0
           fi
+          git config user.name "lifestyle-tg bot"
+          git config user.email "actions@users.noreply.github.com"
+          # Логическую отметку published_at КАЖДУЮ попытку накладываем заново на САМУЮ свежую БД из
+          # origin и делаем fast-forward push. Так гонка push никогда не «теряет» публикацию — иначе
+          # тот же стих выйдет повторно (баг 26→27.06 с shev107). Бинарную БД не мёржим — переналагаем.
+          for attempt in 1 2 3 4 5; do
+            git fetch -q origin "$BR"
+            git reset -q --hard "origin/$BR"
+            npm run mark-published
+            node -e "const {DatabaseSync}=require('node:sqlite');const d=new DatabaseSync('shevchenko.db');d.exec('PRAGMA wal_checkpoint(TRUNCATE)');d.close();"
+            if git diff --quiet -- shevchenko.db; then
+              echo "✓ published_at уже в origin — отправлять нечего."
+              exit 0
+            fi
+            git add shevchenko.db
+            git commit -q -m "chore(post): published_at update [skip ci]"
+            if git push origin "HEAD:$BR"; then
+              echo "✓ published_at сохранён в origin (попытка $attempt)"
+              exit 0
+            fi
+            echo "push отклонён — origin ушёл вперёд, переналагаю (попытка $attempt)…"
+          done
+          echo "::error::НЕ удалось сохранить published_at за 5 попыток — РИСК ПОВТОРНОГО ПОСТА, проверить вручную!"
+          exit 1
