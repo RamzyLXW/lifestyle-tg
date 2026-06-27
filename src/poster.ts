@@ -4,7 +4,7 @@
 //   npm run post -- --date 18.02     выбрать на конкретный день
 //   npm run post                     выбрать на сегодня и ОТПРАВИТЬ в канал
 import { Store } from "./db.js";
-import { selectEntry, chooseFooter, type Selectable } from "./engine.js";
+import { selectEntry, chooseFooter, labelKey, COOLDOWN_DAYS, type Selectable } from "./engine.js";
 import { renderPostHtml, renderPostPreview, type RenderInput } from "./render.js";
 import { requireEnv } from "./config.js";
 import { getMe, getChat, sendMessage } from "./telegram.js";
@@ -34,7 +34,14 @@ async function post() {
 
   const store = new Store();
   const pool = store.approvedUnpublished() as unknown as Selectable[];
-  const { entry, strategy } = selectEntry(pool, today);
+  const recentLabels = new Set(
+    store.recentlyPublished(COOLDOWN_DAYS).map(labelKey).filter((k) => k !== ""),
+  );
+  const { entry, strategy, relaxedCooldown } = selectEntry(pool, today, { recentLabels });
+
+  if (relaxedCooldown) {
+    console.log(`ℹ️  90-дневный кулдаун по подписи снят: все кандидаты недавно использовали свой ярлык.`);
+  }
 
   if (!entry) {
     console.log("⚠️  нечего постить (пул пуст / всё опубликовано) — ПРОПУСК дня + алерт (бриф п.5).");

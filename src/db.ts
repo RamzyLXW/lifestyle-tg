@@ -136,6 +136,20 @@ export class Store {
     this.db.prepare("UPDATE entries SET published_at = ? WHERE source_id = ?").run(iso, sid);
   }
 
+  /** Записи, опубликованные за последние `days` дней (для кулдауна по подписи). */
+  recentlyPublished(days: number): { source_label: string | null; work_title: string | null }[] {
+    const cutoffMs = Date.now() - days * 24 * 60 * 60 * 1000;
+    const rows = this.db
+      .prepare(
+        "SELECT source_label, work_title, published_at FROM entries WHERE published_at IS NOT NULL AND published_at != ''",
+      )
+      .all() as { source_label: string | null; work_title: string | null; published_at: string }[];
+    return rows.filter((r) => {
+      const t = Date.parse(r.published_at);
+      return Number.isFinite(t) && t >= cutoffMs;
+    });
+  }
+
   /** Удалить запись (напр. blob-дневник заменяем разрезанными записями, или чистим аппарат). */
   remove(sid: string): number {
     return Number(this.db.prepare("DELETE FROM entries WHERE source_id = ?").run(sid).changes);

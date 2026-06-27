@@ -28,9 +28,22 @@ function prettifyTitle(s: string): string {
 
 export type Strategy = "on-this-day" | "random-interesting" | "none";
 
+/** Кулдаун по ПОДПИСИ (ярлыку): один и тот же ярлык («Думка») не выходит чаще, чем раз в столько дней. */
+export const COOLDOWN_DAYS = 90;
+
+/**
+ * Ключ кулдауна = подпись, как её видит читатель (`source_label`, иначе название произведения).
+ * Регистр нормализуем; одинаковые названия («Думка» у разных стихов) → один ключ. Пусто = без ключа.
+ */
+export function labelKey(e: Pick<Selectable, "source_label" | "work_title">): string {
+  return (e.source_label?.trim() || e.work_title?.trim() || "").toUpperCase();
+}
+
 export interface Plan {
   entry?: Selectable;
   strategy: Strategy;
+  /** true, если 90-дневный кулдаун по подписи пришлось снять (все кандидаты под кулдауном — день не пропускаем). */
+  relaxedCooldown?: boolean;
 }
 
 /** 1) «В этот день»: совпадает день+месяц. Если несколько — самая ранняя по году. */
@@ -47,16 +60,31 @@ function randomInteresting(pool: Selectable[], rand: () => number): Selectable |
   return cands[Math.floor(rand() * cands.length)];
 }
 
-/** Выбор записи. pool = approved + неопубликованные (антиповтор уже учтён). */
+/**
+ * Выбор записи. pool = approved + неопубликованные (точный антиповтор по source_id уже учтён на входе).
+ * Второй слой: 90-дневный кулдаун по ПОДПИСИ — убираем кандидатов, чей ярлык выходил недавно
+ * (`recentLabels` = множество ключей `labelKey`, опубликованных за последние COOLDOWN_DAYS дней).
+ * Если под кулдауном оказались ВСЕ — снимаем его (relaxedCooldown), чтобы не пропускать день.
+ */
 export function selectEntry(
   pool: Selectable[],
   today: { month: number; day: number },
-  rand: () => number = Math.random,
+  opts: { rand?: () => number; recentLabels?: Set<string> } = {},
 ): Plan {
-  const byDay = onThisDay(pool, today);
-  if (byDay) return { entry: byDay, strategy: "on-this-day" };
-  const rnd = randomInteresting(pool, rand);
-  if (rnd) return { entry: rnd, strategy: "random-interesting" };
+  const rand = opts.rand ?? Math.random;
+  const recent = opts.recentLabels ?? new Set<string>();
+
+  const fresh = pool.filter((e) => {
+    const k = labelKey(e);
+    return k === "" || !recent.has(k);
+  });
+  const relaxedCooldown = fresh.length === 0 && pool.length > 0;
+  const usable = relaxedCooldown ? pool : fresh;
+
+  const byDay = onThisDay(usable, today);
+  if (byDay) return { entry: byDay, strategy: "on-this-day", relaxedCooldown };
+  const rnd = randomInteresting(usable, rand);
+  if (rnd) return { entry: rnd, strategy: "random-interesting", relaxedCooldown };
   return { strategy: "none" };
 }
 
