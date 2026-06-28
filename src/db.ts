@@ -136,14 +136,14 @@ export class Store {
     this.db.prepare("UPDATE entries SET published_at = ? WHERE source_id = ?").run(iso, sid);
   }
 
-  /** Записи, опубликованные за последние `days` дней (для кулдауна по подписи). */
-  recentlyPublished(days: number): { source_label: string | null; work_title: string | null }[] {
+  /** Тексты выжимок, опубликованные за последние `days` дней (для кулдауна по тексту). */
+  recentlyPublished(days: number): { excerpt: string | null }[] {
     const cutoffMs = Date.now() - days * 24 * 60 * 60 * 1000;
     const rows = this.db
       .prepare(
-        "SELECT source_label, work_title, published_at FROM entries WHERE published_at IS NOT NULL AND published_at != ''",
+        "SELECT excerpt, published_at FROM entries WHERE published_at IS NOT NULL AND published_at != ''",
       )
-      .all() as { source_label: string | null; work_title: string | null; published_at: string }[];
+      .all() as { excerpt: string | null; published_at: string }[];
     return rows.filter((r) => {
       const t = Date.parse(r.published_at);
       return Number.isFinite(t) && t >= cutoffMs;

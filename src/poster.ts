@@ -5,7 +5,7 @@
 //   npm run post                     выбрать на сегодня и ОТПРАВИТЬ в канал
 import fs from "node:fs";
 import { Store } from "./db.js";
-import { selectEntry, chooseFooter, labelKey, COOLDOWN_DAYS, type Selectable } from "./engine.js";
+import { selectEntry, chooseFooter, excerptKey, COOLDOWN_DAYS, type Selectable } from "./engine.js";
 import { renderPostHtml, renderPostPreview, type RenderInput } from "./render.js";
 import { requireEnv } from "./config.js";
 import { getMe, getChat, sendMessage } from "./telegram.js";
@@ -35,13 +35,13 @@ async function post() {
 
   const store = new Store();
   const pool = store.approvedUnpublished() as unknown as Selectable[];
-  const recentLabels = new Set(
-    store.recentlyPublished(COOLDOWN_DAYS).map(labelKey).filter((k) => k !== ""),
+  const recentTexts = new Set(
+    store.recentlyPublished(COOLDOWN_DAYS).map(excerptKey).filter((k) => k !== ""),
   );
-  const { entry, strategy, relaxedCooldown } = selectEntry(pool, today, { recentLabels });
+  const { entry, strategy, relaxedCooldown } = selectEntry(pool, today, { recentTexts });
 
   if (relaxedCooldown) {
-    console.log(`ℹ️  90-дневный кулдаун по подписи снят: все кандидаты недавно использовали свой ярлык.`);
+    console.log(`ℹ️  90-дневный кулдаун по тексту снят: все кандидаты недавно уже выходили этим текстом.`);
   }
 
   if (!entry) {

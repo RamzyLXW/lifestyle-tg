@@ -28,21 +28,22 @@ function prettifyTitle(s: string): string {
 
 export type Strategy = "on-this-day" | "random-interesting" | "none";
 
-/** Кулдаун по ПОДПИСИ (ярлыку): один и тот же ярлык («Думка») не выходит чаще, чем раз в столько дней. */
+/** Кулдаун по ТЕКСТУ выжимки: один и тот же текст поста не выходит чаще, чем раз в столько дней. */
 export const COOLDOWN_DAYS = 90;
 
 /**
- * Ключ кулдауна = подпись, как её видит читатель (`source_label`, иначе название произведения).
- * Регистр нормализуем; одинаковые названия («Думка» у разных стихов) → один ключ. Пусто = без ключа.
+ * Ключ кулдауна = САМ ТЕКСТ выжимки (нормализованный: схлопнутые пробелы + нижний регистр).
+ * Так блокируется именно повтор одинакового текста; разные фразы из одного произведения
+ * («Думка» с разными цитатами) считаются разными постами и НЕ душатся. Пусто = без ключа.
  */
-export function labelKey(e: Pick<Selectable, "source_label" | "work_title">): string {
-  return (e.source_label?.trim() || e.work_title?.trim() || "").toUpperCase();
+export function excerptKey(e: Pick<Selectable, "excerpt">): string {
+  return (e.excerpt ?? "").trim().replace(/\s+/g, " ").toLowerCase();
 }
 
 export interface Plan {
   entry?: Selectable;
   strategy: Strategy;
-  /** true, если 90-дневный кулдаун по подписи пришлось снять (все кандидаты под кулдауном — день не пропускаем). */
+  /** true, если 90-дневный кулдаун по тексту пришлось снять (все кандидаты под кулдауном — день не пропускаем). */
   relaxedCooldown?: boolean;
 }
 
@@ -62,20 +63,20 @@ function randomInteresting(pool: Selectable[], rand: () => number): Selectable |
 
 /**
  * Выбор записи. pool = approved + неопубликованные (точный антиповтор по source_id уже учтён на входе).
- * Второй слой: 90-дневный кулдаун по ПОДПИСИ — убираем кандидатов, чей ярлык выходил недавно
- * (`recentLabels` = множество ключей `labelKey`, опубликованных за последние COOLDOWN_DAYS дней).
+ * Второй слой: 90-дневный кулдаун по ТЕКСТУ — убираем кандидатов, чей текст выходил недавно
+ * (`recentTexts` = множество ключей `excerptKey`, опубликованных за последние COOLDOWN_DAYS дней).
  * Если под кулдауном оказались ВСЕ — снимаем его (relaxedCooldown), чтобы не пропускать день.
  */
 export function selectEntry(
   pool: Selectable[],
   today: { month: number; day: number },
-  opts: { rand?: () => number; recentLabels?: Set<string> } = {},
+  opts: { rand?: () => number; recentTexts?: Set<string> } = {},
 ): Plan {
   const rand = opts.rand ?? Math.random;
-  const recent = opts.recentLabels ?? new Set<string>();
+  const recent = opts.recentTexts ?? new Set<string>();
 
   const fresh = pool.filter((e) => {
-    const k = labelKey(e);
+    const k = excerptKey(e);
     return k === "" || !recent.has(k);
   });
   const relaxedCooldown = fresh.length === 0 && pool.length > 0;

@@ -2,7 +2,7 @@
 //   npm run engine                 — на сегодня
 //   npm run engine -- --date 18.02 — на конкретный день (тест стратегии «в этот день»)
 import { Store } from "./db.js";
-import { selectEntry, chooseFooter, labelKey, COOLDOWN_DAYS, type Selectable } from "./engine.js";
+import { selectEntry, chooseFooter, excerptKey, COOLDOWN_DAYS, type Selectable } from "./engine.js";
 import { renderPostPreview, renderPostHtml, type RenderInput } from "./render.js";
 
 function parseToday(): { month: number; day: number } {
@@ -19,17 +19,17 @@ function main() {
   const today = parseToday();
   const store = new Store();
   const pool = store.approvedUnpublished() as unknown as Selectable[];
-  const recentLabels = new Set(
-    store.recentlyPublished(COOLDOWN_DAYS).map(labelKey).filter((k) => k !== ""),
+  const recentTexts = new Set(
+    store.recentlyPublished(COOLDOWN_DAYS).map(excerptKey).filter((k) => k !== ""),
   );
   store.close();
 
   console.log(
-    `Пул (approved + не опубликовано): ${pool.length} | под кулдауном подписей: ${recentLabels.size} | день ${today.day}.${today.month}\n`,
+    `Пул (approved + не опубликовано): ${pool.length} | под кулдауном текстов: ${recentTexts.size} | день ${today.day}.${today.month}\n`,
   );
 
-  const { entry, strategy, relaxedCooldown } = selectEntry(pool, today, { recentLabels });
-  if (relaxedCooldown) console.log("ℹ️  90-дневный кулдаун по подписи снят (все кандидаты под ним).\n");
+  const { entry, strategy, relaxedCooldown } = selectEntry(pool, today, { recentTexts });
+  if (relaxedCooldown) console.log("ℹ️  90-дневный кулдаун по тексту снят (все кандидаты под ним).\n");
   if (!entry) {
     console.log("⚠️  нечего постить (пул пуст / всё опубликовано) — ПРОПУСК дня + алерт (бриф п.5).");
     return;
